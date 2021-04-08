@@ -3,8 +3,12 @@
 ## Requirement
 
 ```sudo pip3 install spotipy ```
-```sudo pip3 install Pillowsudo```
+```sudo pip3 install Pillow```
 ```sudo pip3 install pygame```
+```sudo pip3 install numpy```
+```sudo pip3 install glitch-this```
+
+
 
 
 for pygame 
