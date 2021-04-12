@@ -8,7 +8,7 @@ import io
 from PIL import Image
 from glitch_this import ImageGlitcher
 import random
-from threading import Timer
+import threading
 
 screen_width = 720
 screen_height = 480
@@ -130,7 +130,6 @@ class SpotiCrtFrameBuffer :
                     image_str = urlopen(image_uri).read()
                     image_file = io.BytesIO(image_str)        
                     image_PIL = Image.open(image_file).convert("RGBA")
-                    image_PIL.save("toto.bmp")
                     new_height = int(image_PIL.height * (new_width/image_PIL.width))
                     self.PIL_spotify_image = blank_picture.copy()
                     self.PIL_spotify_image.paste(image_PIL.resize((new_width, new_height), Image.ANTIALIAS))
@@ -145,7 +144,7 @@ class SpotiCrtFrameBuffer :
             
     def get_spotify_image_timer(self, spotify_reader, period):
         self.get_spotify_image(spotify_reader)
-        t = Timer(period, self.get_spotify_image_timer, args=(spotify_reader,period))
+        t = threading.Timer(period, self.get_spotify_image_timer, args=(spotify_reader,period))
         t.start()
             
         
@@ -158,14 +157,22 @@ class SpotiCrtFrameBuffer :
         glitch_factor = random.random()*2+1
         for i in range(0,number):
             glitch_img = self.glitcher.glitch_image(self.PIL_spotify_image , glitch_factor, color_offset=True, scan_lines=False).convert("RGBA")
-            raw_str  = glitch_img.tobytes("raw", 'RGBA')
-            self.glitch_images.append(pygame.image.fromstring(raw_str, glitch_img.size, 'RGBA').convert())
+            self.glitch_images.append(self.PIL_to_pygame(glitch_img))
+
+    def threaded_compute_glitch_images(self, number)):
+        t = threading.Thread(target=self.compute_glitch_images, args=(number,))
+        t.start()
+        return t
 
     def display_glitch_images(self):
         for glitch_image in self.glitch_images:
             self.screen.blit(glitch_image, (0, 0))  
-            self.display_lines()
-            pygame.display.flip()
+            
+    def display_glitch_image(self, index):        
+        self.screen.blit(self.glitch_images[index], (0, 0))  
+            
+    def number_glitch_images(self):
+        return len(self.glitch_images)
     
     def display_lines(self):
         for line in self.noised_lines:
@@ -196,11 +203,30 @@ scope.get_spotify_image_timer(spotify_reader, 5)
 scope.display_spotify_image()
 pygame.display.flip()
 
+loop_index = 0
+loop_max = random.randrange(2,10)*60
+
+glitch_index = 0
+
 while(True):
-    scope.compute_glitch_images(random.randrange(10,50))
-    scope.display_glitch_images()
-    sleep(0.2)
-    loop_max = random.randrange(2,10)*60
+    
+    if loop_index == loop_max:
+        scope.display_glitch_image(glitch_index)
+        glitch_index += 1
+        if glitch_index == self.number_glitch_images()                
+            loop_max = random.randrange(2,10)*60
+            loop_index = 0
+            glitch_index = 0
+            scope.threaded_compute_glitch_images(random.randrange(10,50))
+    else:               
+        scope.display_spotify_image()
+        loop_index += 1
+    
+    scope.display_lines()
+    
+    pygame.display.update()
+    
+    '''
     for i in range(0,loop_max):       
         scope.display_spotify_image()
         scope.display_lines()
@@ -212,3 +238,5 @@ while(True):
             pygame.display.flip()
             print("Break")
             break
+    ''' 
+            
