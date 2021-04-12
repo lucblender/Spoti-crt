@@ -21,33 +21,37 @@ image_no_signal.paste(Image.open("no_signal.bmp").convert("RGBA"))
 
 class CrtNoiseLine: 
     
-    noised_line = None    
+    noised_line = None   
     
     def __init__(self):
         self.line_width = screen_width
-        self.line_height = random.randrange(1,int(screen_height/15))
-        self.noised_line = self.white_noise_pygame_image(line_width, line_height)
-        self.line_increment = random.randrange(10,20)
+        self.line_height = random.randrange(1,int(screen_height/7))
+        self.noised_line = self.white_noise_pygame_image(self.line_width, self.line_height)
+        self.line_increment = random.randrange(3,7)
         self.is_living = False
+        self.offset_line = 0
             
-    def display_line(self):       
+    def display_line(self, screen):       
         #TODO may remove the comented line, it's how to do a simple line without noise
         #img = Image.new('RGBA', size=(line_width, line_height), color=(127,127,127,127))
         #raw_str  = img.tobytes("raw", 'RGBA')
         #pygame_image = pygame.image.fromstring(raw_str, img.size, 'RGBA')   
         #pygame_image = self.white_noise_pygame_image(line_width, line_height) white noise line
         if self.is_living == True:
-            self.screen.blit(self.noised_line , (0, self.offset_line))        
-            self.offset_line = (self.offset_line + line_increment)%screen_height
+            screen.blit(self.noised_line , (0, self.offset_line))        
+            self.offset_line = (self.offset_line + self.line_increment)%screen_height
         
         if self.offset_line == 0:
             self.is_living = False
         
     def white_noise_pygame_image(self, width, height):
+        transparency_max = 50
         pil_map = Image.new("RGBA", (width, height), 255)
         random_grid = map(lambda x: (
-                ((int(random.random() * 256),)*3) + (127,)
-            ), [0] * width * height)
+                ((int(random.random() * 256),)*3) + (int((x/width)*(transparency_max/height)) if (int((x/width)*(transparency_max/height)))<(transparency_max/2) else transparency_max- int((x/width)*(transparency_max/height)),)
+            ), range(0, width * height))
+            
+            
         pil_map.putdata(list(random_grid))        
         noise_str = pil_map.tobytes("raw", 'RGBA')
         noise_image = pygame.image.fromstring(noise_str, (width,height), 'RGBA')
@@ -70,6 +74,7 @@ class SpotiCrtFrameBuffer :
         self.track_picture_updated = False
         self.track_updated = False
         self.glitcher = ImageGlitcher()
+        self.glitch_mutex = threading.Lock()
         
         disp_no = os.getenv("DISPLAY")
         if disp_no:
@@ -153,20 +158,25 @@ class SpotiCrtFrameBuffer :
         
     def compute_glitch_images(self, number):
         print("compute glitch")
+        self.glitch_mutex.acquire()
         self.glitch_images = []
         glitch_factor = random.random()*2+1
         for i in range(0,number):
             glitch_img = self.glitcher.glitch_image(self.PIL_spotify_image , glitch_factor, color_offset=True, scan_lines=False).convert("RGBA")
             self.glitch_images.append(self.PIL_to_pygame(glitch_img))
+        
+        self.glitch_mutex.release()
 
-    def threaded_compute_glitch_images(self, number)):
+    def threaded_compute_glitch_images(self, number):
         t = threading.Thread(target=self.compute_glitch_images, args=(number,))
         t.start()
         return t
 
-    def display_glitch_images(self):
+    def display_glitch_images(self):        
+        self.glitch_mutex.acquire()
         for glitch_image in self.glitch_images:
             self.screen.blit(glitch_image, (0, 0))  
+        self.glitch_mutex.release()
             
     def display_glitch_image(self, index):        
         self.screen.blit(self.glitch_images[index], (0, 0))  
@@ -175,11 +185,13 @@ class SpotiCrtFrameBuffer :
         return len(self.glitch_images)
     
     def display_lines(self):
+        probability = 200
         for line in self.noised_lines:
             if line.is_living == False:
-                if random.random()*10 >9:
+                if random.random()*probability > probability-1:
+                    print("revive")
                     line.revive()
-            line.display_line()
+            line.display_line(self.screen)
             
     #TODO may be removed since now in CrtNoiseLine class
     def white_noise_pygame_image(self, width, height):
@@ -213,11 +225,12 @@ while(True):
     if loop_index == loop_max:
         scope.display_glitch_image(glitch_index)
         glitch_index += 1
-        if glitch_index == self.number_glitch_images()                
+        if glitch_index == scope.number_glitch_images():              
             loop_max = random.randrange(2,10)*60
             loop_index = 0
             glitch_index = 0
             scope.threaded_compute_glitch_images(random.randrange(10,50))
+            
     else:               
         scope.display_spotify_image()
         loop_index += 1
