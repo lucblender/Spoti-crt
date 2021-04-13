@@ -2,10 +2,10 @@ import os
 import pygame
 from time import sleep
 import random
-from SpotiCrtDisplay import *
+from SpotiApiConnector import *
 from urllib.request import urlopen
 import io 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from glitch_this import ImageGlitcher
 import random
 import threading
@@ -13,10 +13,12 @@ import threading
 screen_width = 720
 screen_height = 480
 
-blank_picture = Image.new('RGBA', size=(screen_width, screen_height), color=(0,0,0,255))
+pos_image = (42,22)
+
+blank_picture = Image.open('background.bmp').convert("RGBA")
 
 image_no_signal = blank_picture.copy()
-image_no_signal.paste(Image.open("no_signal.bmp").convert("RGBA"))
+image_no_signal.paste(Image.open("no_signal.bmp").convert("RGBA"), pos_image)
 
 
 class CrtNoiseLine: 
@@ -25,7 +27,7 @@ class CrtNoiseLine:
     
     def __init__(self):
         self.line_width = screen_width
-        self.line_height = random.randrange(1,int(screen_height/7))
+        self.line_height = random.randrange(1,int(screen_height/5))
         self.noised_line = self.white_noise_pygame_image(self.line_width, self.line_height)
         self.line_increment = random.randrange(3,7)
         self.is_living = False
@@ -48,7 +50,7 @@ class CrtNoiseLine:
         transparency_max = 50
         pil_map = Image.new("RGBA", (width, height), 255)
         random_grid = map(lambda x: (
-                ((int(random.random() * 256),)*3) + (int((x/width)*(transparency_max/height)) if (int((x/width)*(transparency_max/height)))<(transparency_max/2) else transparency_max- int((x/width)*(transparency_max/height)),)
+                ((int(random.random() * 256),)*3) + (10+(int((x/width)*(transparency_max/height)) if (int((x/width)*(transparency_max/height)))<(transparency_max/2) else transparency_max- int((x/width)*(transparency_max/height))),)
             ), range(0, width * height))
             
             
@@ -119,9 +121,20 @@ class SpotiCrtFrameBuffer :
  
     def __del__(self):
         "Destructor to make sure pygame shuts down, etc."
+        
+    def crop_text(self, text, font_local, size, draw_image):
+        w, h = draw_image.textsize(text, font = font_local)
+        if w > size:
+            remove_char = 3
+            while draw_image.textsize(text[:-remove_char]+"...", font = font_local)[0] > size:
+                remove_char+=1
+                w, h = draw_image.textsize(text, font = font_local) 
+            return text[:-remove_char]+"..."
+        else:
+            return text    
     
     def get_spotify_image(self, spotify_reader):
-        new_width = screen_height 
+        new_width = 339
         
         new_track = spotify_reader.get_current_track_info()
         
@@ -129,7 +142,7 @@ class SpotiCrtFrameBuffer :
             self.track_updated = True
             if new_track  != None:
                 old_album_uri = self.track.album_uri if self.track != None else ""
-                if old_album_uri != new_track.album_uri:           
+                if old_album_uri != new_track.album_uri or self.track.album_name != new_track.album_name or self.track.title != new_track.title:           
                     print("track_picture_updated")
                     image_uri = new_track.album_uri
                     image_str = urlopen(image_uri).read()
@@ -137,7 +150,24 @@ class SpotiCrtFrameBuffer :
                     image_PIL = Image.open(image_file).convert("RGBA")
                     new_height = int(image_PIL.height * (new_width/image_PIL.width))
                     self.PIL_spotify_image = blank_picture.copy()
-                    self.PIL_spotify_image.paste(image_PIL.resize((new_width, new_height), Image.ANTIALIAS))
+                    self.PIL_spotify_image.paste(image_PIL.resize((new_width, new_height), Image.ANTIALIAS), pos_image)
+                    
+                    font25Medium = ImageFont.truetype('./Noir/NoirStd-Medium.ttf', 27)
+                    font25Regular = ImageFont.truetype('./Noir/NoirStd-Regular.ttf', 27)
+                    font15Medium = ImageFont.truetype('./Noir/NoirStd-Medium.ttf', 21)
+                    font15Regular = ImageFont.truetype('./Noir/NoirStd-Regular.ttf', 21)
+                    
+                    padding_width = 415
+                    white = (255,)*3
+                    grey = (75,)*3
+                    PIL_draw_image = ImageDraw.Draw(self.PIL_spotify_image)
+                    PIL_draw_image.text((padding_width, 70), self.crop_text(new_track.artists_name[0],font25Medium,264,PIL_draw_image), font = font25Medium, fill = grey)                    
+                    PIL_draw_image.text((padding_width, 115), "Title", font = font15Regular, fill = white)
+                    PIL_draw_image.text((padding_width, 150), self.crop_text(new_track.title,font25Regular,264,PIL_draw_image), font = font25Regular, fill = grey)
+                    PIL_draw_image.text((padding_width, 200), "Album", font = font15Regular, fill = white)
+                    PIL_draw_image.text((padding_width, 235), self.crop_text(new_track.album_name,font25Regular,264,PIL_draw_image), font = font25Regular, fill = grey)
+                    PIL_draw_image.text((padding_width, 285), new_track.duration, font = font15Regular, fill = grey) 
+                    
                     self.pygame_spotify_image = self.PIL_to_pygame(self.PIL_spotify_image)
                     self.compute_glitch_images(random.randrange(10,50))
                     self.track_picture_updated = True   
@@ -154,10 +184,9 @@ class SpotiCrtFrameBuffer :
             
         
     def display_spotify_image(self):
-        self.screen.blit(self.pygame_spotify_image, (0, 0))
+        self.screen.blit(self.pygame_spotify_image, (0,0))
         
     def compute_glitch_images(self, number):
-        print("compute glitch")
         self.glitch_mutex.acquire()
         self.glitch_images = []
         glitch_factor = random.random()*2+1
@@ -175,21 +204,24 @@ class SpotiCrtFrameBuffer :
     def display_glitch_images(self):        
         self.glitch_mutex.acquire()
         for glitch_image in self.glitch_images:
-            self.screen.blit(glitch_image, (0, 0))  
+            self.screen.blit(glitch_image, (0,0))  
         self.glitch_mutex.release()
             
     def display_glitch_image(self, index):        
-        self.screen.blit(self.glitch_images[index], (0, 0))  
+        self.glitch_mutex.acquire()
+        if index >= self.number_glitch_images():
+            index = 0
+        self.screen.blit(self.glitch_images[index], (0,0))          
+        self.glitch_mutex.release()
             
     def number_glitch_images(self):
         return len(self.glitch_images)
     
     def display_lines(self):
-        probability = 200
+        probability = 500
         for line in self.noised_lines:
             if line.is_living == False:
                 if random.random()*probability > probability-1:
-                    print("revive")
                     line.revive()
             line.display_line(self.screen)
             
@@ -211,7 +243,7 @@ class SpotiCrtFrameBuffer :
  
 scope = SpotiCrtFrameBuffer()
 spotify_reader = SpotifyReader()
-scope.get_spotify_image_timer(spotify_reader, 5)
+scope.get_spotify_image_timer(spotify_reader, 2)
 scope.display_spotify_image()
 pygame.display.flip()
 
@@ -238,18 +270,4 @@ while(True):
     scope.display_lines()
     
     pygame.display.update()
-    
-    '''
-    for i in range(0,loop_max):       
-        scope.display_spotify_image()
-        scope.display_lines()
-        pygame.display.update()
-        if scope.track_picture_updated == True:
-            scope.track_picture_updated  = False  
-            scope.display_glitch_images()          
-            scope.display_spotify_image()
-            pygame.display.flip()
-            print("Break")
-            break
-    ''' 
             

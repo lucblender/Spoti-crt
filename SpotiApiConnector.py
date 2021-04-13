@@ -8,17 +8,23 @@ class SpotifyTrack():
     def __init__(self, is_playing, progress_ms, duration_ms, album_uri, title, album_name, artists_name):
         self.is_playing = is_playing
         self.progress_ms = progress_ms
-        self.duration_ms = duration_ms
+        self.duration = self.ms_to_min_sec(duration_ms)
         self.album_uri = album_uri
         self.title = title
         self.album_name = album_name
         self.artists_name = artists_name
         
+    def ms_to_min_sec(self, duration_ms):
+        millis = int(duration_ms)
+        seconds=int(millis/1000)%60
+        minutes=int(millis/(1000*60))
+        return ("%02d:%02d" % (minutes, seconds))
+        
 class SpotifyReader():
     def __init__(self):
         scope = "user-library-read, user-read-currently-playing, user-read-playback-state"
 
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope), requests_timeout=10)
         
 
     def get_current_track_info(self):
