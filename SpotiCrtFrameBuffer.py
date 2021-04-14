@@ -16,6 +16,8 @@ screen_height = 480
 pos_image = (42,22)
 
 blank_picture = Image.open('background.bmp').convert("RGBA")
+play_picture = Image.open('play.bmp').convert("RGBA")
+pause_picture = Image.open('pause.bmp').convert("RGBA")
 
 image_no_signal = blank_picture.copy()
 image_no_signal.paste(Image.open("no_signal.bmp").convert("RGBA"), pos_image)
@@ -50,7 +52,7 @@ class CrtNoiseLine:
         transparency_max = 50
         pil_map = Image.new("RGBA", (width, height), 255)
         random_grid = map(lambda x: (
-                ((int(random.random() * 256),)*3) + (10+(int((x/width)*(transparency_max/height)) if (int((x/width)*(transparency_max/height)))<(transparency_max/2) else transparency_max- int((x/width)*(transparency_max/height))),)
+                ((int(random.random() * 256),)*3) + ((int((x/width)*(transparency_max/height)) if (int((x/width)*(transparency_max/height)))<(transparency_max/2) else transparency_max- int((x/width)*(transparency_max/height))),)
             ), range(0, width * height))
             
             
@@ -114,6 +116,7 @@ class SpotiCrtFrameBuffer :
         pygame.display.update()
         
         self.pygame_spotify_image = self.PIL_to_pygame(self.PIL_spotify_image)
+        self.compute_glitch_images(random.randrange(10,50))
         
         self.noised_lines = []
         for i in range(0,5):
@@ -142,8 +145,8 @@ class SpotiCrtFrameBuffer :
             self.track_updated = True
             if new_track  != None:
                 old_album_uri = self.track.album_uri if self.track != None else ""
-                if old_album_uri != new_track.album_uri or self.track.album_name != new_track.album_name or self.track.title != new_track.title:           
-                    print("track_picture_updated")
+                
+                if  old_album_uri != new_track.album_uri or self.track.album_name != new_track.album_name or self.track.title != new_track.title or new_track.duration_percent != self.track.duration_percent or new_track.is_playing != self.track.is_playing:  
                     image_uri = new_track.album_uri
                     image_str = urlopen(image_uri).read()
                     image_file = io.BytesIO(image_str)        
@@ -167,6 +170,23 @@ class SpotiCrtFrameBuffer :
                     PIL_draw_image.text((padding_width, 200), "Album", font = font15Regular, fill = white)
                     PIL_draw_image.text((padding_width, 235), self.crop_text(new_track.album_name,font25Regular,264,PIL_draw_image), font = font25Regular, fill = grey)
                     PIL_draw_image.text((padding_width, 285), new_track.duration, font = font15Regular, fill = grey) 
+                    
+                    rectangle_width = 220
+                    rectangle_height = 4
+                    
+                    rectangle_x = 440
+                    rectangle_y = 343
+                    
+                    PIL_draw_image.rectangle([(rectangle_x,rectangle_y), (rectangle_x+rectangle_width,rectangle_y+rectangle_height)], fill = (50,)*3)
+                    
+                    rectangle_width = int(rectangle_width*new_track.duration_percent/100)
+                    
+                    PIL_draw_image.rectangle([(rectangle_x,rectangle_y), (rectangle_x+rectangle_width,rectangle_y+rectangle_height)], fill = (250,)*3)
+                    
+                    if new_track.is_playing:
+                        self.PIL_spotify_image.paste(play_picture, (415,335))
+                    else:
+                        self.PIL_spotify_image.paste(pause_picture, (415,335))
                     
                     self.pygame_spotify_image = self.PIL_to_pygame(self.PIL_spotify_image)
                     self.compute_glitch_images(random.randrange(10,50))
@@ -207,12 +227,15 @@ class SpotiCrtFrameBuffer :
             self.screen.blit(glitch_image, (0,0))  
         self.glitch_mutex.release()
             
-    def display_glitch_image(self, index):        
+    def display_glitch_image(self, index): 
+        if self.glitch_mutex.locked() == True:
+            return False
         self.glitch_mutex.acquire()
         if index >= self.number_glitch_images():
-            index = 0
+            index = index%self.number_glitch_images()
         self.screen.blit(self.glitch_images[index], (0,0))          
         self.glitch_mutex.release()
+        return True
             
     def number_glitch_images(self):
         return len(self.glitch_images)
@@ -254,10 +277,12 @@ glitch_index = 0
 
 while(True):
     
-    if loop_index == loop_max:
-        scope.display_glitch_image(glitch_index)
+    if loop_index >= loop_max:
+        displayed = scope.display_glitch_image(glitch_index)
+        if displayed == False:
+            scope.display_spotify_image()
         glitch_index += 1
-        if glitch_index == scope.number_glitch_images():              
+        if glitch_index >= scope.number_glitch_images():              
             loop_max = random.randrange(2,10)*60
             loop_index = 0
             glitch_index = 0
