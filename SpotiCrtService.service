@@ -1,0 +1,18 @@
+Description=Spotify Crt display service
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3.7 /home/pi/Spoti-crt/SpotiCrtFrameBuffer.py
+WorkingDirectory=/home/pi/Spoti-crt
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+User=root
+
+[Unit]
+StartLimitIntervalSec=20
+StartLimitBurst=20
+
+[Install]
+WantedBy=multi-user.target
+

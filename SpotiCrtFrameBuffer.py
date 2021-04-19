@@ -9,6 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 from glitch_this import ImageGlitcher
 import random
 import threading
+import signal
+import sys
 
 screen_width = 720
 screen_height = 480
@@ -25,7 +27,7 @@ image_no_signal.paste(Image.open("no_signal.bmp").convert("RGBA"), pos_image)
 
 class CrtNoiseLine: 
     
-    noised_line = None   
+    noised_line = None 
     
     def __init__(self):
         self.line_width = screen_width
@@ -72,6 +74,8 @@ class SpotiCrtFrameBuffer :
     track = None
     glitch_images = []
     offset_line = 0
+    t = None
+    glitch_t = None
     
     def __init__(self):
 
@@ -199,8 +203,8 @@ class SpotiCrtFrameBuffer :
             
     def get_spotify_image_timer(self, spotify_reader, period):
         self.get_spotify_image(spotify_reader)
-        t = threading.Timer(period, self.get_spotify_image_timer, args=(spotify_reader,period))
-        t.start()
+        self.t = threading.Timer(period, self.get_spotify_image_timer, args=(spotify_reader,period))
+        self.t.start()
             
         
     def display_spotify_image(self):
@@ -217,9 +221,10 @@ class SpotiCrtFrameBuffer :
         self.glitch_mutex.release()
 
     def threaded_compute_glitch_images(self, number):
-        t = threading.Thread(target=self.compute_glitch_images, args=(number,))
-        t.start()
-        return t
+        self.glitch_t = threading.Thread(target=self.compute_glitch_images, args=(number,))
+        self.glitch_t.daemon = True
+        self.glitch_t.start()
+        return self.glitch_t
 
     def display_glitch_images(self):        
         self.glitch_mutex.acquire()
@@ -262,6 +267,7 @@ class SpotiCrtFrameBuffer :
     def PIL_to_pygame(self, PIL_image):
         raw_str  = PIL_image.tobytes("raw", 'RGBA')
         return pygame.image.fromstring(raw_str, PIL_image.size, 'RGBA').convert()
+
             
  
 scope = SpotiCrtFrameBuffer()
@@ -274,6 +280,20 @@ loop_index = 0
 loop_max = random.randrange(2,10)*60
 
 glitch_index = 0
+
+        
+def exit_gracefully(signum, frame):
+    if scope.t != None:
+        scope.t.cancel()
+        
+    try:
+        scope.glitch_mutex.release()
+    except:
+        pass
+    sys.exit()
+        
+signal.signal(signal.SIGINT, exit_gracefully)
+signal.signal(signal.SIGTERM, exit_gracefully)
 
 while(True):
     

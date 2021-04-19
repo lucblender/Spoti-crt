@@ -27,14 +27,22 @@ class SpotifyTrack():
         return ("%02d:%02d" % (minutes, seconds))
         
 class SpotifyReader():
+    
+    sp = None
+    
     def __init__(self):
-        scope = "user-library-read, user-read-currently-playing, user-read-playback-state"
-
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope), requests_timeout=10)
+        self.scope = "user-library-read, user-read-currently-playing, user-read-playback-state"
+        self.loadSp()
         
+    def loadSp(self):
+        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=self.scope), requests_timeout=10)        
 
     def get_current_track_info(self):
-        current_track = self.sp.current_playback()
+        try:
+            current_track = self.sp.current_playback()
+        except:            
+            self.loadSp() #reload sp 
+            return None
         
         if current_track == None: #in the case there is 
             return None            
